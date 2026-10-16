@@ -19,7 +19,7 @@ TARGET_DIR="${2:-$HOME/eventstream}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 KEY_PATH="${KEY_PATH:-$HOME/.ssh/id_ed25519_eventstream}"
 GIT_EMAIL="${GIT_EMAIL:-retromaximus@github}"
-VENV_DIR="${VENV_DIR:-.venv-eventstream}"
+VENV_DIR="${VENV_DIR:-.venv}"
 ENV_DIR="${ENV_DIR:-$HOME/.config/eventstream}"
 ENV_FILE="${ENV_FILE:-$ENV_DIR/eventstream.env}"
 ENV_TEMPLATE="${ENV_TEMPLATE:-.env.example}"
@@ -197,6 +197,6 @@ python main.py --check || {
 
 echo
 echo "[pull_latest] done"
-echo "[pull_latest] activate with: source $TARGET_DIR/$VENV_DIR/bin/activate"
+echo "[pull_latest] activate with: source $TARGET_DIR/.venv/bin/activate"
 echo "[pull_latest] env file:      $ENV_FILE"
 echo "[pull_latest] run with:      python main.py"
