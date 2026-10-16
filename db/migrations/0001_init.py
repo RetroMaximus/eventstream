@@ -10,11 +10,16 @@ NAME = "0001_init"
 
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS schema_migrations (
-    version     INTEGER PRIMARY KEY,
-    name        TEXT NOT NULL,
-    applied_at  TEXT NOT NULL DEFAULT (datetime('now'))
-);
+CREATE TABLE IF NOT EXISTS user_roles (
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role_id     INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    event_id    INTEGER NOT NULL DEFAULT 0,
+    granted_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, role_id, event_id)
+)
+
+CREATE INDEX IF NOT EXISTS idx_user_roles_user   ON user_roles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_event  ON user_roles(event_id);
 
 CREATE TABLE IF NOT EXISTS users (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,7 +106,8 @@ CREATE INDEX IF NOT EXISTS idx_user_roles_user   ON user_roles(user_id);
 
 
 def up(conn: sqlite3.Connection) -> None:
-    conn.executescript(SCHEMA)
+    for statement in _split_statements(SCHEMA):
+        conn.execute(statement)
 
 
 def down(conn: sqlite3.Connection) -> None:
@@ -110,5 +116,25 @@ def down(conn: sqlite3.Connection) -> None:
         "user_roles", "role_permissions", "permissions", "roles",
         "users", "schema_migrations",
     ):
-        conn.execute(f"DROP TABLE IF EXISTS {table};")
+        conn.execute(f"DROP TABLE IF EXISTS {table};")
+
+def _split_statements(sql: str) -> list[str]:
+    """Split a SQL script into individual statements.
+
+    Avoids sqlite3.executescript(), which commits the current transaction
+    before running and breaks rollback on failure.
+    """
+    statements: list[str] = []
+    buffer: list[str] = []
+    for line in sql.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("--"):
+            continue
+        buffer.append(line)
+        if stripped.endswith(";"):
+            statements.append("\n".join(buffer).strip())
+            buffer = []
+    if buffer:
+        statements.append("\n".join(buffer).strip())
+    return statements
 
