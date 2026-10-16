@@ -101,6 +101,66 @@ else
   echo "[pull_latest] SSH test inconclusive, continuing"
 fi
 
+resolve_generated_collisions() {
+  local target_dir="$1"
+
+  if [ ! -d "$target_dir/.git" ]; then
+    return 0
+  fi
+
+  cd "$target_dir"
+
+  # Fetch first so we know what origin/main contains.
+  git fetch --quiet origin main || true
+
+  # List of untracked files that also exist in origin/main.
+  # git diff --name-only with --diff-filter=A shows files added remotely.
+  # Intersect with git ls-files --others --exclude-standard (untracked local).
+  local untracked remote_added
+  untracked="$(git ls-files --others --exclude-standard || true)"
+  remote_added="$(git diff --name-only --diff-filter=A HEAD..origin/main 2>/dev/null || true)"
+
+  [ -z "$untracked" ] && return 0
+  [ -z "$remote_added" ] && return 0
+
+  local collisions
+  collisions="$(comm -12 <(printf '%s\n' "$untracked" | sort -u) \
+                        <(printf '%s\n' "$remote_added" | sort -u))"
+
+  [ -z "$collisions" ] && return 0
+
+  echo "[pull_latest] resolving generated file collisions:"
+  while IFS= read -r path; do
+    [ -z "$path" ] && continue
+
+    local is_generated=0
+    if [ -f "$path" ]; then
+      # Empty file
+      if [ ! -s "$path" ]; then
+        is_generated=1
+      fi
+      # Standard installer docstring
+      if [ "$(wc -l < "$path" 2>/dev/null || echo 0)" -le 2 ] && \
+         head -n 1 "$path" 2>/dev/null | grep -q '"""eventstream package."""'; then
+        is_generated=1
+      fi
+      # .gitkeep placeholder
+      case "$path" in
+        *.gitkeep) is_generated=1 ;;
+      esac
+    fi
+
+    if [ "$is_generated" -eq 1 ]; then
+      echo "[pull_latest]   removing generated file: $path"
+      rm -f "$path"
+    else
+      echo "[pull_latest]   WARNING: collision with local file: $path"
+      echo "[pull_latest]   moving to ${path}.pi-backup"
+      mv "$path" "${path}.pi-backup"
+    fi
+  done <<< "$collisions"
+}
+
 # ---------------------------------------------------------------------------
 # 5. Clone or pull
 # ---------------------------------------------------------------------------
@@ -109,9 +169,10 @@ if [ ! -d "$TARGET_DIR/.git" ]; then
   git clone "$REPO_URL" "$TARGET_DIR"
 else
   echo "[pull_latest] pulling latest"
-  git -C "$TARGET_DIR" pull --ff-only
+  resolve_generated_collisions "$TARGET_DIR"
+  cd "$TARGET_DIR"
+  git pull --ff-only
 fi
-
 cd "$TARGET_DIR"
 
 # ---------------------------------------------------------------------------
