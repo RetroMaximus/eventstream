@@ -8,6 +8,11 @@ from config.settings import Settings
 from core.health import HealthCheck
 from db.connection import Database
 from db.migrations.runner import MigrationRunner
+from db.repositories.audit_repo import AuditRepository
+from db.repositories.oauth_repo import OAuthRepository
+from db.repositories.rate_limit_repo import RateLimitRepository
+from db.repositories.session_repo import SessionRepository
+from db.repositories.user_repo import UserRepository
 from ops.audit import AuditLog
 from ops.logging import LoggingSetup
 from security.crypto import CryptoBox
@@ -23,6 +28,12 @@ class Application:
     crypto: CryptoBox
     audit: AuditLog
     health: HealthCheck
+
+    users: UserRepository
+    sessions: SessionRepository
+    oauth: OAuthRepository
+    audits: AuditRepository
+    rate_limits: RateLimitRepository
 
     @classmethod
     def build(cls) -> "Application":
@@ -41,6 +52,12 @@ class Application:
         audit = AuditLog(db, crypto)
         health = HealthCheck(db, migrations)
 
+        users = UserRepository(db, crypto)
+        sessions = SessionRepository(db, crypto)
+        oauth = OAuthRepository(db, crypto)
+        audits = AuditRepository(db, crypto)
+        rate_limits = RateLimitRepository(db, crypto)
+
         return cls(
             settings=settings,
             db=db,
@@ -49,5 +66,9 @@ class Application:
             crypto=crypto,
             audit=audit,
             health=health,
+            users=users,
+            sessions=sessions,
+            oauth=oauth,
+            audits=audits,
+            rate_limits=rate_limits,
         )
-
