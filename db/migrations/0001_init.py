@@ -1,4 +1,3 @@
-
 """Initial schema: users, roles, permissions, sessions, audit, backups, keys."""
 
 from __future__ import annotations
@@ -10,16 +9,11 @@ NAME = "0001_init"
 
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS user_roles (
-    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role_id     INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    event_id    INTEGER NOT NULL DEFAULT 0,
-    granted_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (user_id, role_id, event_id)
-)
-
-CREATE INDEX IF NOT EXISTS idx_user_roles_user   ON user_roles(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_roles_event  ON user_roles(event_id);
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version     INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    applied_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE IF NOT EXISTS users (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,9 +51,9 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 CREATE TABLE IF NOT EXISTS user_roles (
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role_id     INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    event_id    INTEGER,
+    event_id    INTEGER NOT NULL DEFAULT 0,
     granted_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (user_id, role_id, IFNULL(event_id, 0))
+    PRIMARY KEY (user_id, role_id, event_id)
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -102,21 +96,9 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires  ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_audit_actor       ON audit_log(actor_id);
 CREATE INDEX IF NOT EXISTS idx_audit_action      ON audit_log(action);
 CREATE INDEX IF NOT EXISTS idx_user_roles_user   ON user_roles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_event  ON user_roles(event_id);
 """
 
-
-def up(conn: sqlite3.Connection) -> None:
-    for statement in _split_statements(SCHEMA):
-        conn.execute(statement)
-
-
-def down(conn: sqlite3.Connection) -> None:
-    for table in (
-        "key_rotations", "backups", "audit_log", "sessions",
-        "user_roles", "role_permissions", "permissions", "roles",
-        "users", "schema_migrations",
-    ):
-        conn.execute(f"DROP TABLE IF EXISTS {table};")
 
 def _split_statements(sql: str) -> list[str]:
     """Split a SQL script into individual statements.
@@ -138,3 +120,16 @@ def _split_statements(sql: str) -> list[str]:
         statements.append("\n".join(buffer).strip())
     return statements
 
+
+def up(conn: sqlite3.Connection) -> None:
+    for statement in _split_statements(SCHEMA):
+        conn.execute(statement)
+
+
+def down(conn: sqlite3.Connection) -> None:
+    for table in (
+        "key_rotations", "backups", "audit_log", "sessions",
+        "user_roles", "role_permissions", "permissions", "roles",
+        "users", "schema_migrations",
+    ):
+        conn.execute(f"DROP TABLE IF EXISTS {table};")
