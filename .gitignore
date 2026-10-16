@@ -16,10 +16,13 @@ __pycache__/
 build/
 dist/
 
-# env
+# env files - exclude real ones, keep the template
 .env
 .env.eventstream
+.env.local
+.env.production
 .env.*
+!.env.example
 
 # runtime
 var/
@@ -30,4 +33,3 @@ var/
 # os
 .DS_Store
 Thumbs.db
-

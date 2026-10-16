@@ -20,7 +20,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 KEY_PATH="${KEY_PATH:-$HOME/.ssh/id_ed25519_eventstream}"
 GIT_NAME="${GIT_NAME:-RetroMaximus}"
 GIT_EMAIL="${GIT_EMAIL:-retromaximus@github}"
-VENV_DIR="${VENV_DIR:-.venv-eventstream}"
+VENV_DIR="${VENV_DIR:-.venv}"
 ENV_FILE="${ENV_FILE:-.env.eventstream}"
 
 echo "[pull_latest] repo:   $REPO_URL"
