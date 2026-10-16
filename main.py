@@ -10,7 +10,7 @@ from pathlib import Path
 # Ensure we run under the project venv, regardless of how this file is called.
 # ---------------------------------------------------------------------------
 _PROJECT_ROOT = Path(__file__).resolve().parent
-_VENV_DIR = _PROJECT_ROOT / os.environ.get("VENV_DIR", ".venv-eventstream")
+_VENV_DIR = _PROJECT_ROOT / os.environ.get("VENV_DIR", ".venv")
 _VENV_PYTHON = _VENV_DIR / "bin" / "python"
 if not _VENV_PYTHON.exists():
     # Windows fallback
