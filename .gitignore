@@ -33,3 +33,9 @@ var/
 # os
 .DS_Store
 Thumbs.db
+
+# text files
+ProductionPlan.txt
+ComunityComp.txt
+pull_latest.sh
+push_to_git.sh

@@ -19,10 +19,19 @@ TARGET_DIR="${2:-$HOME/eventstream}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 KEY_PATH="${KEY_PATH:-$HOME/.ssh/id_ed25519_eventstream}"
 GIT_EMAIL="${GIT_EMAIL:-retromaximus@github}"
-VENV_DIR="${VENV_DIR:-.venv}"
 ENV_DIR="${ENV_DIR:-$HOME/.config/eventstream}"
 ENV_FILE="${ENV_FILE:-$ENV_DIR/eventstream.env}"
 ENV_TEMPLATE="${ENV_TEMPLATE:-.env.example}"
+
+# Resolve TARGET_DIR to an absolute path so venv paths are unambiguous.
+if [ -d "$TARGET_DIR" ]; then
+  TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
+else
+  # If it does not exist yet, resolve its parent and rebuild the path.
+  TARGET_DIR="$(cd "$(dirname "$TARGET_DIR")" && pwd)/$(basename "$TARGET_DIR")"
+fi
+
+VENV_DIR="${VENV_DIR:-$TARGET_DIR/.venv}"
 
 echo "[pull_latest] repo:   $REPO_URL"
 echo "[pull_latest] target: $TARGET_DIR"
@@ -197,6 +206,6 @@ python main.py --check || {
 
 echo
 echo "[pull_latest] done"
-echo "[pull_latest] activate with: source $TARGET_DIR/.venv/bin/activate"
+echo "[pull_latest] activate with: source $VENV_DIR/bin/activate"
 echo "[pull_latest] env file:      $ENV_FILE"
 echo "[pull_latest] run with:      python main.py"
