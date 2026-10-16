@@ -49,7 +49,11 @@ class Database:
                 conn.execute("COMMIT;")
                 return result
             except Exception:
-                conn.execute("ROLLBACK;")
+                try:
+                    if conn.in_transaction:
+                        conn.execute("ROLLBACK;")
+                except sqlite3.Error:
+                    pass
                 raise
             finally:
                 conn.close()
@@ -59,5 +63,5 @@ class Database:
         try:
             return fn(conn)
         finally:
-            conn.close()
+            conn.close()
 

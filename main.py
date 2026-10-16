@@ -2,13 +2,32 @@
 
 from __future__ import annotations
 
+import os
+import sys
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Ensure we run under the project venv, regardless of how this file is called.
+# ---------------------------------------------------------------------------
+_PROJECT_ROOT = Path(__file__).resolve().parent
+_VENV_DIR = _PROJECT_ROOT / os.environ.get("VENV_DIR", ".venv-eventstream")
+_VENV_PYTHON = _VENV_DIR / "bin" / "python"
+if not _VENV_PYTHON.exists():
+    # Windows fallback
+    _VENV_PYTHON = _VENV_DIR / "Scripts" / "python.exe"
+
+if _VENV_PYTHON.exists():
+    _running = Path(sys.executable).resolve()
+    _wanted = _VENV_PYTHON.resolve()
+    if _running != _wanted:
+        os.execv(str(_wanted), [str(_wanted), str(Path(__file__).resolve()), *sys.argv[1:]])
+# ---------------------------------------------------------------------------
+
 import argparse
 import logging
-import sys
 
 from core.app import Application
 from install_init import LayoutInstaller
-from pathlib import Path
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -24,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
 
     if args.install_layout:
-        LayoutInstaller(Path(__file__).resolve().parent).run()
+        LayoutInstaller(_PROJECT_ROOT).run()
         return 0
 
     app = Application.build()
@@ -39,11 +58,8 @@ def main(argv: list[str] | None = None) -> int:
              app.settings.app_env, app.settings.db_path)
     log.info("migrations at version %s", app.migrations.current_version())
     log.info("phase 0 complete: foundation ready")
-
-    # Phase 1+ will start the aiohttp server here.
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

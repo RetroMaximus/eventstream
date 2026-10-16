@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # pull_latest.sh - clone or update eventstream on a headless Raspberry Pi.
-# Safe to run repeatedly. Generates an SSH key on first run if missing.
-# Bootstraps the venv, dependencies, .env.eventstream, layout, and health check.
+# Safe to run repeatedly. Generates an SSH key only if missing.
+# Bootstraps venv, dependencies, env file, layout, and health check.
 
 set -euo pipefail
 
@@ -18,10 +18,11 @@ REPO_URL="${1:-git@github.com:RetroMaximus/eventstream.git}"
 TARGET_DIR="${2:-$HOME/eventstream}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 KEY_PATH="${KEY_PATH:-$HOME/.ssh/id_ed25519_eventstream}"
-GIT_NAME="${GIT_NAME:-RetroMaximus}"
 GIT_EMAIL="${GIT_EMAIL:-retromaximus@github}"
-VENV_DIR="${VENV_DIR:-.venv}"
-ENV_FILE="${ENV_FILE:-.env.eventstream}"
+VENV_DIR="${VENV_DIR:-.venv-eventstream}"
+ENV_DIR="${ENV_DIR:-$HOME/.config/eventstream}"
+ENV_FILE="${ENV_FILE:-$ENV_DIR/eventstream.env}"
+ENV_TEMPLATE="${ENV_TEMPLATE:-.env.example}"
 
 echo "[pull_latest] repo:   $REPO_URL"
 echo "[pull_latest] target: $TARGET_DIR"
@@ -30,24 +31,24 @@ echo "[pull_latest] venv:   $VENV_DIR"
 echo "[pull_latest] env:    $ENV_FILE"
 
 # ---------------------------------------------------------------------------
-# 1. SSH key
+# 1. SSH key - only generate if missing
 # ---------------------------------------------------------------------------
 mkdir -p "$HOME/.ssh"
 chmod 700 "$HOME/.ssh"
 
 if [ ! -f "$KEY_PATH" ]; then
-  echo "[pull_latest] generating SSH key"
+  echo "[pull_latest] generating SSH key at $KEY_PATH"
   ssh-keygen -t ed25519 -C "$GIT_EMAIL" -f "$KEY_PATH" -N ""
   echo
-  echo "[pull_latest] -------------------------------------------------------------------"
+  echo "[pull_latest] ---------------------------------------------------------------"
   echo "[pull_latest] PUBLIC KEY - paste into https://github.com/settings/keys"
-  echo "[pull_latest] -------------------------------------------------------------------"
+  echo "[pull_latest] ---------------------------------------------------------------"
   cat "$KEY_PATH.pub"
-  echo "[pull_latest] -------------------------------------------------------------------"
+  echo "[pull_latest] ---------------------------------------------------------------"
   echo
   read -r -p "[pull_latest] press Enter once the key is added to GitHub: " _
 else
-  echo "[pull_latest] SSH key already exists"
+  echo "[pull_latest] SSH key already exists, skipping generation"
 fi
 
 chmod 600 "$KEY_PATH"
@@ -81,12 +82,14 @@ fi
 ssh-add "$KEY_PATH" 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
-# 4. SSH connectivity test
+# 4. SSH connectivity test (informational only)
 # ---------------------------------------------------------------------------
 echo "[pull_latest] testing SSH to github.com"
-if ! ssh -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
-  echo "[pull_latest] WARNING: SSH test did not confirm authentication"
-  echo "[pull_latest] continuing anyway; git clone may fail"
+SSH_OUTPUT="$(ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes -T git@github.com 2>&1 || true)"
+if printf '%s' "$SSH_OUTPUT" | grep -q "successfully authenticated"; then
+  echo "[pull_latest] SSH OK"
+else
+  echo "[pull_latest] SSH test inconclusive, continuing"
 fi
 
 # ---------------------------------------------------------------------------
@@ -103,31 +106,57 @@ fi
 cd "$TARGET_DIR"
 
 # ---------------------------------------------------------------------------
-# 6. venv + deps
+# 6. venv
 # ---------------------------------------------------------------------------
 if [ ! -d "$VENV_DIR" ]; then
   echo "[pull_latest] creating venv at $VENV_DIR"
   "$PYTHON_BIN" -m venv "$VENV_DIR"
+else
+  echo "[pull_latest] venv already exists at $VENV_DIR"
 fi
 
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
 
-python -m pip install --upgrade pip wheel >/dev/null
-python -m pip install -e . >/dev/null
+# ---------------------------------------------------------------------------
+# 7. dependencies
+# ---------------------------------------------------------------------------
+if [ -f requirements.lock.txt ]; then
+  REQ_FILE="requirements.lock.txt"
+else
+  REQ_FILE="requirements.txt"
+fi
+
+if [ ! -f "$REQ_FILE" ]; then
+  echo "[pull_latest] ERROR: $REQ_FILE missing"
+  exit 1
+fi
+
+echo "[pull_latest] installing dependencies from $REQ_FILE"
+python -m pip install --upgrade pip wheel \
+  --timeout 60 --retries 5 --progress-bar off
+python -m pip install -r "$REQ_FILE" \
+  --timeout 60 --retries 5 --progress-bar off
 
 # ---------------------------------------------------------------------------
-# 7. env file
+# 8. env file
 # ---------------------------------------------------------------------------
+mkdir -p "$ENV_DIR"
+chmod 700 "$ENV_DIR"
+
+if [ ! -f "$ENV_TEMPLATE" ]; then
+  echo "[pull_latest] ERROR: $ENV_TEMPLATE missing from repo"
+  exit 1
+fi
+
 if [ ! -f "$ENV_FILE" ]; then
-  cp .env.example "$ENV_FILE"
+  cp "$ENV_TEMPLATE" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
   echo "[pull_latest] created $ENV_FILE"
-  echo "[pull_latest] generating EVENTSTREAM_MASTER_KEY and EVENTSTREAM_SESSION_SECRET"
 
   MASTER_KEY="$(python -c 'import os,base64;print(base64.b64encode(os.urandom(32)).decode())')"
   SESSION_SECRET="$(python -c 'import os,base64;print(base64.b64encode(os.urandom(32)).decode())')"
 
-  # replace placeholder values
   python - "$ENV_FILE" "$MASTER_KEY" "$SESSION_SECRET" <<'PY'
 import sys
 from pathlib import Path
@@ -144,19 +173,21 @@ text = text.replace("EVENTSTREAM_SESSION_SECRET=REPLACE_ME",
 path.write_text(text, encoding="utf-8")
 PY
 
-  echo "[pull_latest] wrote secrets to $ENV_FILE"
-  echo "[pull_latest] back up $ENV_FILE somewhere safe; losing the master key loses encrypted data"
+  echo "[pull_latest] wrote generated secrets to $ENV_FILE"
+  echo "[pull_latest] back this file up; losing the master key loses encrypted data"
 else
   echo "[pull_latest] $ENV_FILE already exists, leaving as is"
 fi
 
+export EVENTSTREAM_ENV_FILE="$ENV_FILE"
+
 # ---------------------------------------------------------------------------
-# 8. Layout
+# 9. layout
 # ---------------------------------------------------------------------------
 python install_init.py
 
 # ---------------------------------------------------------------------------
-# 9. Health check
+# 10. health check
 # ---------------------------------------------------------------------------
 echo "[pull_latest] running health check"
 python main.py --check || {
@@ -166,5 +197,6 @@ python main.py --check || {
 
 echo
 echo "[pull_latest] done"
-echo "[pull_latest] activate with: source $VENV_DIR/bin/activate"
+echo "[pull_latest] activate with: source $TARGET_DIR/$VENV_DIR/bin/activate"
+echo "[pull_latest] env file:      $ENV_FILE"
 echo "[pull_latest] run with:      python main.py"
