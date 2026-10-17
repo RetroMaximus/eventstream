@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }}{% endblock %}
+{% block content %}
+  <section class="card">
+    <h1>{{ app_name }}</h1>
+    <p class="muted">Event and tournament control plane for the Raspberry Pi.</p>
+    <p>
+      <a class="btn" href="/login">Log in</a>
+      <a class="btn btn-secondary" href="/register">Register</a>
+    </p>
+  </section>
+{% endblock %}

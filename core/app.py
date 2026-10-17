@@ -2,7 +2,10 @@
 sessions, csrf, rate limits, and the aiohttp application.
 """
 
+
 from __future__ import annotations
+
+from pathlib import Path
 
 from dataclasses import dataclass
 
@@ -35,7 +38,10 @@ from ops.audit import AuditLog
 from ops.logging import LoggingSetup
 from security.crypto import CryptoBox
 from security.keyring import Keyring
-
+from web.routes.health import HealthRoutes
+from web.routes.public import PublicRoutes
+from web.template_engine import TemplateEngine
+from web.view import View
 
 @dataclass
 class Application:
@@ -61,6 +67,9 @@ class Application:
     rate_limit_service: RateLimitService
     router: Router
     web_app: web.Application
+
+    templates: TemplateEngine
+    view: View
 
     @classmethod
     def build(cls) -> "Application":
@@ -116,6 +125,24 @@ class Application:
         web_app["roles"] = roles
         web_app["sessions"] = session_service
         web_app["rate_limits"] = rate_limit_service
+
+        templates = TemplateEngine(settings.project_root / "web" / "templates")
+        view = View(templates)
+
+        web_app.router.add_static(
+            "/static/",
+            path=str(settings.project_root / "web" / "static"),
+            name="static",
+        )
+
+        health_routes = HealthRoutes(health)
+        health_routes.register(router)
+
+        public_routes = PublicRoutes(view)
+        public_routes.register(router)
+
+        # Register the accumulated routes on the aiohttp app
+        router.apply(web_app)
 
         return cls(
             settings=settings,

@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 
+from aiohttp import web
 # ---------------------------------------------------------------------------
 # Ensure we run under the project venv, regardless of how this file is called.
 # ---------------------------------------------------------------------------
@@ -57,7 +58,15 @@ def main(argv: list[str] | None = None) -> int:
     log.info("eventstream booted env=%s db=%s",
              app.settings.app_env, app.settings.db_path)
     log.info("migrations at version %s", app.migrations.current_version())
-    log.info("phase 0 complete: foundation ready")
+    log.info("web server listening on %s:%s",
+             app.settings.host, app.settings.port)
+    web.run_app(
+        app.web_app,
+        host=app.settings.host,
+        port=app.settings.port,
+        access_log=log,
+        print=None,
+    )
     return 0
 
 

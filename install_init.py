@@ -57,6 +57,8 @@ class ProjectLayout:
         "web/routes",
         "web/templates",
         "web/static",
+        "web/static/css"
+        "web/static/js"
         "web/i18n",
         "web/theme",
         "security",
@@ -155,5 +157,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main())
+
 
