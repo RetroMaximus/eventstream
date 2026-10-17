@@ -1,39 +1,32 @@
 """Application container. Wires settings, db, crypto, logging, audit, health,
-sessions, csrf, rate limits, and the aiohttp application.
+sessions, csrf, rate limits, templates, views, routes, and the aiohttp app.
 """
 
-
 from __future__ import annotations
-
-from pathlib import Path
 
 from dataclasses import dataclass
 
 from aiohttp import web
 
-
-APP_SETTINGS: web.AppKey = web.AppKey("settings")
-APP_USERS: web.AppKey = web.AppKey("users")
-APP_ROLES: web.AppKey = web.AppKey("roles")
-APP_SESSIONS: web.AppKey = web.AppKey("sessions")
-APP_RATE_LIMITS: web.AppKey = web.AppKey("rate_limits")
-
-from core.app_keys import (
-    APP_SETTINGS, APP_USERS, APP_ROLES, APP_SESSIONS, APP_RATE_LIMITS,
-)
-
 from auth.passwords import PasswordHasherService
 from auth.roles import RoleSeeder
 from auth.totp import TOTP
 from config.settings import Settings
+from core.app_keys import (
+    APP_RATE_LIMITS,
+    APP_ROLES,
+    APP_SESSIONS,
+    APP_SETTINGS,
+    APP_USERS,
+)
 from core.health import HealthCheck
 from core.middleware import (
+    csrf_middleware,
     error_middleware,
-    make_csrf_middleware,
-    make_rate_limit_middleware,
-    make_session_middleware,
+    rate_limit_middleware,
     request_id_middleware,
     security_headers_middleware,
+    session_middleware,
 )
 from core.ratelimit import RateLimitService
 from core.router import Router
@@ -53,6 +46,7 @@ from web.routes.health import HealthRoutes
 from web.routes.public import PublicRoutes
 from web.template_engine import TemplateEngine
 from web.view import View
+
 
 @dataclass
 class Application:
@@ -152,7 +146,6 @@ class Application:
         public_routes = PublicRoutes(view)
         public_routes.register(router)
 
-        # Register the accumulated routes on the aiohttp app
         router.apply(web_app)
 
         return cls(
