@@ -171,6 +171,3 @@ class Application:
             templates=templates,
             view=view,
         )
-
-    def finalize_routes(self) -> None:
-        self.router.apply(self.web_app)

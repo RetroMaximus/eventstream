@@ -119,17 +119,17 @@ class Application:
                 error_middleware,
                 security_headers_middleware,
                 request_id_middleware,
-                session_middleware,
-                csrf_middleware,
-                rate_limit_middleware,
+                make_session_middleware,
+                make_csrf_middleware,
+                make_rate_limit_middleware,
             ],
             client_max_size=2 * 1024 * 1024,
         )
-        web_app[APP_SETTINGS] = settings
-        web_app[APP_USERS] = users
-        web_app[APP_ROLES] = roles
-        web_app[APP_SESSIONS] = session_service
-        web_app[APP_RATE_LIMITS] = rate_limit_service
+        web_app["settings"] = settings
+        web_app["users"] = users
+        web_app["roles"] = roles
+        web_app["sessions"] = session_service
+        web_app["rate_limits"] = rate_limit_service
 
         templates = TemplateEngine(settings.project_root / "web" / "templates")
         view = View(templates)
