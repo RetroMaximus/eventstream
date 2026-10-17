@@ -1,14 +1,29 @@
-"""Application container. Wires settings, db, crypto, logging, audit, health."""
+"""Application container. Wires settings, db, crypto, logging, audit, health,
+sessions, csrf, rate limits, and the aiohttp application.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from aiohttp import web
 
 from auth.passwords import PasswordHasherService
 from auth.roles import RoleSeeder
 from auth.totp import TOTP
 from config.settings import Settings
 from core.health import HealthCheck
+from core.middleware import (
+    error_middleware,
+    make_csrf_middleware,
+    make_rate_limit_middleware,
+    make_session_middleware,
+    request_id_middleware,
+    security_headers_middleware,
+)
+from core.ratelimit import RateLimitService
+from core.router import Router
+from core.session import SessionService
 from db.connection import Database
 from db.migrations.runner import MigrationRunner
 from db.repositories.audit_repo import AuditRepository
@@ -36,11 +51,16 @@ class Application:
     sessions: SessionRepository
     oauth: OAuthRepository
     audits: AuditRepository
-    rate_limits: RateLimitRepository
+    rate_limits_repo: RateLimitRepository
 
     passwords: PasswordHasherService
     totp: TOTP
     roles: RoleSeeder
+
+    session_service: SessionService
+    rate_limit_service: RateLimitService
+    router: Router
+    web_app: web.Application
 
     @classmethod
     def build(cls) -> "Application":
@@ -63,12 +83,39 @@ class Application:
         sessions = SessionRepository(db, crypto)
         oauth = OAuthRepository(db, crypto)
         audits = AuditRepository(db, crypto)
-        rate_limits = RateLimitRepository(db, crypto)
+        rate_limits_repo = RateLimitRepository(db, crypto)
 
         passwords = PasswordHasherService()
         totp = TOTP()
         roles = RoleSeeder(db)
         roles.seed()
+
+        session_service = SessionService(
+            sessions=sessions,
+            cookie_name=settings.cookie_name,
+            cookie_secure=settings.cookie_secure,
+            cookie_samesite=settings.cookie_samesite,
+            ttl_seconds=settings.session_ttl,
+        )
+        rate_limit_service = RateLimitService(rate_limits_repo)
+        router = Router()
+
+        web_app = web.Application(
+            middlewares=[
+                error_middleware,
+                security_headers_middleware,
+                request_id_middleware,
+                make_session_middleware,      # factory
+                make_csrf_middleware,         # factory
+                make_rate_limit_middleware,   # factory
+            ],
+            client_max_size=2 * 1024 * 1024,
+        )
+        web_app["settings"] = settings
+        web_app["users"] = users
+        web_app["roles"] = roles
+        web_app["sessions"] = session_service
+        web_app["rate_limits"] = rate_limit_service
 
         return cls(
             settings=settings,
@@ -82,8 +129,15 @@ class Application:
             sessions=sessions,
             oauth=oauth,
             audits=audits,
-            rate_limits=rate_limits,
+            rate_limits_repo=rate_limits_repo,
             passwords=passwords,
             totp=totp,
             roles=roles,
+            session_service=session_service,
+            rate_limit_service=rate_limit_service,
+            router=router,
+            web_app=web_app,
         )
+
+    def finalize_routes(self) -> None:
+        self.router.apply(self.web_app)

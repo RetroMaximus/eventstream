@@ -115,7 +115,8 @@ security/ crypto, keyring, rotation, headers, xss, gdpr
 storage/ uploads, screenshots, clips, backups
 ops/ logging, audit, metrics, alerts, tasks
 scripts/ init_db, create_admin, rotate_keys, export/import, backup
-tests/ unit, integration, e2e, fixtures
+tests/ unit, integration, e2e, fixtures
+
 deploy/ nginx.conf, systemd, cloudflare tunnel, backup cron
 docs/ architecture, permissions, routes, obs naming, runbook
 var/ runtime data (untracked): db, logs, uploads, backups
@@ -124,7 +125,6 @@ setup.sh clone + venv + install + init on a fresh Pi
 main.py entrypoint
 pyproject.toml
 README.md
-
 ```
 
 Every Python package has an `__init__.py`. `install_init.py` creates them if
@@ -180,7 +180,7 @@ EVENTSTREAM_HOST:EVENTSTREAM_PORT.
 
 Configuration
 
-text```
+```text
 All configuration is environment variables, loaded from .env via
 python-dotenv.
 Variable	Purpose	Default
@@ -352,7 +352,7 @@ License
 
 TBD. Until a license is chosen, all rights reserved by the author.
 
-text```
+```text
 Acknowledgements
 
 Built for the Deadlock community and for charity events that deserve
