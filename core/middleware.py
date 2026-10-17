@@ -25,7 +25,13 @@ from core.errors import (
     json_error,
 )
 from core.ratelimit import RateLimitService
-from core.request_context import REQUEST_CTX_KEY, RequestContext
+
+from core.request_context import RequestContext
+
+# Request-scoped key for the per-request context.
+# Must be a web.RequestKey (not AppKey) because it is used with request[...].
+REQUEST_CTX_KEY: web.RequestKey = web.RequestKey("eventstream_ctx")
+
 from core.session import SessionService
 
 log = logging.getLogger("eventstream.http")
