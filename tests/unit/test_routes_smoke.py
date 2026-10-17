@@ -18,4 +18,4 @@ async def test_healthz_and_home():
         resp = await client.get("/")
         assert resp.status == 200
         text = await resp.text()
-        assert "eventstream" in tex
+        assert "eventstream" in text

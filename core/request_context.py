@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from aiohttp import web
 
 @dataclass
 class RequestContext:
@@ -21,4 +22,4 @@ class RequestContext:
     extras: dict[str, Any] = field(default_factory=dict)
 
 
-REQUEST_CTX_KEY = "eventstream_ctx"
+REQUEST_CTX_KEY: web.AppKey = web.AppKey("eventstream_ctx")
