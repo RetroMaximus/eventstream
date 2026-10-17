@@ -164,6 +164,8 @@ class Application:
             rate_limit_service=rate_limit_service,
             router=router,
             web_app=web_app,
+            templates=templates,
+            view=view,
         )
 
     def finalize_routes(self) -> None:
