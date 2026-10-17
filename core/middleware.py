@@ -22,6 +22,10 @@ from core.ratelimit import RateLimitService
 from core.request_context import REQUEST_CTX_KEY, RequestContext
 from core.session import SessionService
 
+from core.app_keys import (
+    APP_USERS, APP_ROLES, APP_SESSIONS, APP_RATE_LIMITS,
+)
+
 log = logging.getLogger("eventstream.http")
 
 # ---------------------------------------------------------------------------
@@ -126,9 +130,11 @@ async def request_id_middleware(request: web.Request, handler):
 # Session
 # ---------------------------------------------------------------------------
 def make_session_middleware(app: web.Application):
-    session_service: SessionService = app["sessions"]
-    users = app["users"]
-    roles = app["roles"]
+
+    session_service: SessionService = app[APP_SESSIONS]
+    users = app[APP_USERS]
+    roles = app[APP_ROLES]
+
 
     @web.middleware
     async def session_middleware(request: web.Request, handler):
@@ -186,7 +192,8 @@ def make_csrf_middleware(app: web.Application):
 # Rate limit
 # ---------------------------------------------------------------------------
 def make_rate_limit_middleware(app: web.Application):
-    rl: RateLimitService = app["rate_limits"]
+    
+    rl: RateLimitService = app[APP_RATE_LIMITS]
 
     @web.middleware
     async def rate_limit_middleware(request: web.Request, handler):

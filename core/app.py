@@ -11,6 +11,17 @@ from dataclasses import dataclass
 
 from aiohttp import web
 
+
+APP_SETTINGS: web.AppKey = web.AppKey("settings")
+APP_USERS: web.AppKey = web.AppKey("users")
+APP_ROLES: web.AppKey = web.AppKey("roles")
+APP_SESSIONS: web.AppKey = web.AppKey("sessions")
+APP_RATE_LIMITS: web.AppKey = web.AppKey("rate_limits")
+
+from core.app_keys import (
+    APP_SETTINGS, APP_USERS, APP_ROLES, APP_SESSIONS, APP_RATE_LIMITS,
+)
+
 from auth.passwords import PasswordHasherService
 from auth.roles import RoleSeeder
 from auth.totp import TOTP
@@ -120,11 +131,11 @@ class Application:
             ],
             client_max_size=2 * 1024 * 1024,
         )
-        web_app["settings"] = settings
-        web_app["users"] = users
-        web_app["roles"] = roles
-        web_app["sessions"] = session_service
-        web_app["rate_limits"] = rate_limit_service
+        web_app[APP_SETTINGS] = settings
+        web_app[APP_USERS] = users
+        web_app[APP_ROLES] = roles
+        web_app[APP_SESSIONS] = session_service
+        web_app[APP_RATE_LIMITS] = rate_limit_service
 
         templates = TemplateEngine(settings.project_root / "web" / "templates")
         view = View(templates)
