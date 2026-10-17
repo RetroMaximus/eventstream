@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from auth.passwords import PasswordHasherService
+from auth.roles import RoleSeeder
+from auth.totp import TOTP
 from config.settings import Settings
 from core.health import HealthCheck
 from db.connection import Database
@@ -35,6 +38,10 @@ class Application:
     audits: AuditRepository
     rate_limits: RateLimitRepository
 
+    passwords: PasswordHasherService
+    totp: TOTP
+    roles: RoleSeeder
+
     @classmethod
     def build(cls) -> "Application":
         settings = Settings.load()
@@ -58,6 +65,11 @@ class Application:
         audits = AuditRepository(db, crypto)
         rate_limits = RateLimitRepository(db, crypto)
 
+        passwords = PasswordHasherService()
+        totp = TOTP()
+        roles = RoleSeeder(db)
+        roles.seed()
+
         return cls(
             settings=settings,
             db=db,
@@ -71,4 +83,7 @@ class Application:
             oauth=oauth,
             audits=audits,
             rate_limits=rate_limits,
+            passwords=passwords,
+            totp=totp,
+            roles=roles,
         )
