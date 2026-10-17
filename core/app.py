@@ -125,9 +125,9 @@ class Application:
                 error_middleware,
                 security_headers_middleware,
                 request_id_middleware,
-                make_session_middleware,      # factory
-                make_csrf_middleware,         # factory
-                make_rate_limit_middleware,   # factory
+                session_middleware,
+                csrf_middleware,
+                rate_limit_middleware,
             ],
             client_max_size=2 * 1024 * 1024,
         )

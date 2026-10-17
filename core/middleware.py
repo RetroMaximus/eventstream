@@ -11,6 +11,12 @@ from config.constants import (
     RATE_LIMIT_DEFAULT_MAX,
     RATE_LIMIT_DEFAULT_WINDOW_SECONDS,
 )
+from core.app_keys import (
+    APP_RATE_LIMITS,
+    APP_ROLES,
+    APP_SESSIONS,
+    APP_USERS,
+)
 from core.csrf import CsrfService
 from core.errors import (
     CsrfFailed,
@@ -22,15 +28,8 @@ from core.ratelimit import RateLimitService
 from core.request_context import REQUEST_CTX_KEY, RequestContext
 from core.session import SessionService
 
-from core.app_keys import (
-    APP_USERS, APP_ROLES, APP_SESSIONS, APP_RATE_LIMITS,
-)
-
 log = logging.getLogger("eventstream.http")
 
-# ---------------------------------------------------------------------------
-# Static rate limit policy. Keys are route names or "*".
-# ---------------------------------------------------------------------------
 RATE_LIMIT_POLICY: dict[str, tuple[int, int]] = {
     "*": (RATE_LIMIT_DEFAULT_MAX, RATE_LIMIT_DEFAULT_WINDOW_SECONDS),
     "login_post": (10, 900),
@@ -45,9 +44,13 @@ FORM_CONTENT_TYPES = {
     "multipart/form-data",
 }
 
+EXEMPT_PATHS = {
+    "/healthz",
+    "/readyz",
+}
+
 
 def _client_ip(request: web.Request) -> str:
-    # Trust the first hop's forwarded header only if a reverse proxy is set.
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         return forwarded.split(",")[0].strip()
@@ -78,9 +81,11 @@ async def _read_form_cached(request: web.Request) -> dict:
     return data
 
 
-# ---------------------------------------------------------------------------
-# Error middleware (outermost)
-# ---------------------------------------------------------------------------
+async def read_form(request: web.Request) -> dict:
+    """Public helper so handlers get the same cached form data."""
+    return await _read_form_cached(request)
+
+
 @web.middleware
 async def error_middleware(request: web.Request, handler):
     try:
@@ -94,9 +99,6 @@ async def error_middleware(request: web.Request, handler):
         return web.Response(status=500, text="Internal server error")
 
 
-# ---------------------------------------------------------------------------
-# Security headers
-# ---------------------------------------------------------------------------
 @web.middleware
 async def security_headers_middleware(request: web.Request, handler):
     response = await handler(request)
@@ -112,112 +114,81 @@ async def security_headers_middleware(request: web.Request, handler):
     return response
 
 
-# ---------------------------------------------------------------------------
-# Request id
-# ---------------------------------------------------------------------------
 @web.middleware
 async def request_id_middleware(request: web.Request, handler):
     request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
-    ctx = RequestContext(request_id=request_id, client_ip=_client_ip(request),
-                         user_agent=request.headers.get("User-Agent", ""))
+    ctx = RequestContext(
+        request_id=request_id,
+        client_ip=_client_ip(request),
+        user_agent=request.headers.get("User-Agent", ""),
+    )
     request[REQUEST_CTX_KEY] = ctx
     response = await handler(request)
     response.headers["X-Request-ID"] = request_id
     return response
 
 
-# ---------------------------------------------------------------------------
-# Session
-# ---------------------------------------------------------------------------
-def make_session_middleware(app: web.Application):
-
+@web.middleware
+async def session_middleware(request: web.Request, handler):
+    app = request.app
     session_service: SessionService = app[APP_SESSIONS]
     users = app[APP_USERS]
     roles = app[APP_ROLES]
 
+    ctx: RequestContext = request[REQUEST_CTX_KEY]
+    session_id = request.cookies.get(session_service.cookie_name)
+    if session_id:
+        row = session_service.load(session_id)
+        if row is not None:
+            ctx.session_id = session_id
+            ctx.csrf_token = row.get("csrf_token")
+            ctx.user_id = row.get("user_id")
+            ctx.is_authenticated = True
+            user = users.by_id(ctx.user_id)
+            if user is not None:
+                ctx.user = user
+                roles_map = roles.roles_for_user(ctx.user_id)
+                ctx.roles = roles_map.get(0, set())
+                ctx.event_roles = {k: v for k, v in roles_map.items() if k != 0}
+    return await handler(request)
 
-    @web.middleware
-    async def session_middleware(request: web.Request, handler):
-        ctx: RequestContext = request[REQUEST_CTX_KEY]
-        session_id = request.cookies.get(session_service.cookie_name)
-        if session_id:
-            row = session_service.load(session_id)
-            if row is not None:
-                ctx.session_id = session_id
-                ctx.csrf_token = row.get("csrf_token")
-                ctx.user_id = row.get("user_id")
-                ctx.is_authenticated = True
-                user = users.by_id(ctx.user_id)
-                if user is not None:
-                    ctx.user = user
-                    roles_map = roles.roles_for_user(ctx.user_id)
-                    ctx.roles = roles_map.get(0, set())
-                    ctx.event_roles = {k: v for k, v in roles_map.items() if k != 0}
+
+@web.middleware
+async def csrf_middleware(request: web.Request, handler):
+    if CsrfService.is_safe_method(request.method):
+        return await handler(request)
+    if request.path in EXEMPT_PATHS:
+        return await handler(request)
+    if request.path.startswith("/auth/") and request.path.endswith("/callback"):
         return await handler(request)
 
-    return session_middleware
+    ctx: RequestContext = request[REQUEST_CTX_KEY]
+    form = await _read_form_cached(request)
+    provided = CsrfService.extract_from_request(request, form)
+    if not CsrfService.verify(provided, ctx.csrf_token):
+        log.warning("csrf rejected path=%s ip=%s", request.path, ctx.client_ip)
+        raise CsrfFailed()
+    return await handler(request)
 
 
-# ---------------------------------------------------------------------------
-# CSRF
-# ---------------------------------------------------------------------------
-EXEMPT_PATHS = {
-    "/healthz",
-    "/readyz",
-}
-
-
-def make_csrf_middleware(app: web.Application):
-    @web.middleware
-    async def csrf_middleware(request: web.Request, handler):
-        if CsrfService.is_safe_method(request.method):
-            return await handler(request)
-        if request.path in EXEMPT_PATHS:
-            return await handler(request)
-        if request.path.startswith("/auth/") and request.path.endswith("/callback"):
-            return await handler(request)
-
-        ctx: RequestContext = request[REQUEST_CTX_KEY]
-        form = await _read_form_cached(request)
-        provided = CsrfService.extract_from_request(request, form)
-        if not CsrfService.verify(provided, ctx.csrf_token):
-            log.warning("csrf rejected path=%s ip=%s", request.path, ctx.client_ip)
-            raise CsrfFailed()
-        return await handler(request)
-
-    return csrf_middleware
-
-
-# ---------------------------------------------------------------------------
-# Rate limit
-# ---------------------------------------------------------------------------
-def make_rate_limit_middleware(app: web.Application):
-    
+@web.middleware
+async def rate_limit_middleware(request: web.Request, handler):
+    app = request.app
     rl: RateLimitService = app[APP_RATE_LIMITS]
 
-    @web.middleware
-    async def rate_limit_middleware(request: web.Request, handler):
-        ctx: RequestContext = request[REQUEST_CTX_KEY]
-        route_name = request.match_info.route.name or "*"
-        window, max_hits = RATE_LIMIT_POLICY.get(
-            route_name, RATE_LIMIT_POLICY["*"]
-        )
+    ctx: RequestContext = request[REQUEST_CTX_KEY]
+    route_name = request.match_info.route.name or "*"
+    window, max_hits = RATE_LIMIT_POLICY.get(route_name, RATE_LIMIT_POLICY["*"])
 
-        key = f"ip:{ctx.client_ip}"
-        result = rl.check(key, window, max_hits)
-        if not result.allowed:
+    key = f"ip:{ctx.client_ip}"
+    result = rl.check(key, window, max_hits)
+    if not result.allowed:
+        raise RateLimited(retry_after=window)
+
+    if ctx.user_id:
+        user_key = f"user:{ctx.user_id}"
+        user_result = rl.check(user_key, window, max_hits)
+        if not user_result.allowed:
             raise RateLimited(retry_after=window)
 
-        if ctx.user_id:
-            user_key = f"user:{ctx.user_id}"
-            user_result = rl.check(user_key, window, max_hits)
-            if not user_result.allowed:
-                raise RateLimited(retry_after=window)
-
-        return await handler(request)
-
-    return rate_limit_middleware
-
-async def read_form(request: web.Request) -> dict:
-    """Public helper so handlers get the same cached form data."""
-    return await _read_form_cached(request)
+    return await handler(request)
