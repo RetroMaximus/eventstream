@@ -1,4 +1,4 @@
-""Permission matrix and checks."""
+"""Permission matrix and checks."""
 
 from __future__ import annotations
 
